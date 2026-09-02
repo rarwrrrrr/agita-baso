@@ -5,39 +5,58 @@ export default function App() {
   const [cart, setCart] = useState([]);
   const [activeCategory, setActiveCategory] = useState('Semua');
 
-  // State untuk Data Pemesan
+  // Mode Opsi Pemesanan ('Pick-up' atau 'Delivery')
+  const [tipePengiriman, setTipePengiriman] = useState('Pick-up');
   const [namaPembeli, setNamaPembeli] = useState('');
-  const [nomorMeja, setNomorMeja] = useState('');
-  const [tipePesanan, setTipePesanan] = useState('Dine-in'); // Dine-in atau Takeaway
+  const [jamPickup, setJamPickup] = useState('');
+  const [alamatDelivery, setAlamatDelivery] = useState('');
 
-  // State untuk kontrol Modal Pop-up Kustomisasi
+  // State Modal Kustomisasi (Tambah & Edit)
   const [selectedItem, setSelectedItem] = useState(null);
-  const [pedas, setPedas] = useState('Pedas Sedang');
+  const [editingCartItemId, setEditingCartItemId] = useState(null); // Menyimpan ID item yang sedang di-edit
   const [jenisMie, setJenisMie] = useState('Mie Kuning / Pipih');
+  const [sayurToge, setSayurToge] = useState('Lengkap (Sayur + Tauge)');
   const [catatan, setCatatan] = useState('');
 
-  // NOMOR WHATSAPP TOKO (Ganti angka ini dengan nomor WA bapak, awali dengan 62)
-  const NOMOR_WA_TOKO = "6281234567890";
-
+  const NOMOR_WA_TOKO = "62881023823936"; // Ganti dengan nomor WhatsApp toko kamu
   const categories = ['Semua', 'Bakso', 'Mie', 'Minuman', 'Tambahan'];
 
   const filteredMenu = activeCategory === 'Semua' 
     ? MENU_DATA 
     : MENU_DATA.filter((item) => item.kategori === activeCategory);
 
-  // Buka Modal Kustomisasi saat tombol + Tambah diklik
+  // Open Modal Tambah Baru
   const handleOpenModal = (item) => {
     if (item.kategori === 'Minuman' || item.kategori === 'Tambahan') {
       addToCartDirect(item);
     } else {
       setSelectedItem(item);
-      setPedas('Pedas Sedang');
+      setEditingCartItemId(null); // Mode Tambah Baru
       setJenisMie('Mie Kuning / Pipih');
+      setSayurToge('Lengkap (Sayur + Tauge)');
       setCatatan('');
     }
   };
 
-  // Tambah item biasa tanpa kustomisasi
+  // Open Modal Edit Item dari Keranjang
+  const handleEditCartItem = (cartItem) => {
+    const originalMenuItem = MENU_DATA.find((m) => m.id === cartItem.id);
+    setSelectedItem(originalMenuItem || cartItem);
+    setEditingCartItemId(cartItem.cartItemId); // Mode Edit
+    
+    if (cartItem.customOptions) {
+      setJenisMie(cartItem.customOptions.jenisMie || 'Mie Kuning / Pipih');
+      setSayurToge(cartItem.customOptions.sayurToge || 'Lengkap (Sayur + Tauge)');
+      setCatatan(cartItem.customOptions.catatan || '');
+    }
+  };
+
+  // Hapus Item dari Keranjang
+  const handleRemoveFromCart = (cartItemId) => {
+    setCart(cart.filter((c) => c.cartItemId !== cartItemId));
+  };
+
+  // Tambah Langsung (Tanpa Modal)
   const addToCartDirect = (item) => {
     const cartItemId = `${item.id}-default`;
     const existing = cart.find((c) => c.cartItemId === cartItemId);
@@ -49,46 +68,75 @@ export default function App() {
     }
   };
 
-  // Simpan Pesanan dari Modal Pop-up ke Keranjang
+  // Simpan Kustomisasi (Tambah Baru vs Update Edit)
   const handleConfirmCustomization = () => {
-    const cartItemId = `${selectedItem.id}-${pedas}-${jenisMie}-${catatan}`;
-    const existing = cart.find((c) => c.cartItemId === cartItemId);
-
-    if (existing) {
-      setCart(cart.map((c) => c.cartItemId === cartItemId ? { ...c, qty: c.qty + 1 } : c));
-    } else {
-      setCart([
-        ...cart,
-        {
-          ...selectedItem,
-          cartItemId,
-          qty: 1,
-          customOptions: { pedas, jenisMie, catatan }
+    if (editingCartItemId) {
+      // 1. MODE EDIT: Perbarui item yang sudah ada di keranjang
+      setCart(cart.map((item) => {
+        if (item.cartItemId === editingCartItemId) {
+          const newCartItemId = `${item.id}-${jenisMie}-${sayurToge}-${catatan}`;
+          return {
+            ...item,
+            cartItemId: newCartItemId,
+            customOptions: { jenisMie, sayurToge, catatan }
+          };
         }
-      ]);
+        return item;
+      }));
+    } else {
+      // 2. MODE TAMBAH BARU
+      const cartItemId = `${selectedItem.id}-${jenisMie}-${sayurToge}-${catatan}`;
+      const existing = cart.find((c) => c.cartItemId === cartItemId);
+
+      if (existing) {
+        setCart(cart.map((c) => c.cartItemId === cartItemId ? { ...c, qty: c.qty + 1 } : c));
+      } else {
+        setCart([
+          ...cart,
+          {
+            ...selectedItem,
+            cartItemId,
+            qty: 1,
+            customOptions: { jenisMie, sayurToge, catatan }
+          }
+        ]);
+      }
     }
 
-    setSelectedItem(null); // Tutup modal
+    setSelectedItem(null);
+    setEditingCartItemId(null);
   };
 
   const totalHarga = cart.reduce((acc, curr) => acc + curr.harga * curr.qty, 0);
 
-  // FUNGSI CHECKOUT KE WHATSAPP
+  // LOGIKA CHECKOUT KE WHATSAPP TOKO
   const handleCheckoutWhatsApp = () => {
     if (!namaPembeli.trim()) {
       alert("Harap isi nama pemesan terlebih dahulu!");
       return;
     }
 
-    if (tipePesanan === 'Dine-in' && !nomorMeja.trim()) {
-      alert("Harap isi nomor meja untuk pesanan makan di tempat!");
+    if (tipePengiriman === 'Pick-up' && !jamPickup.trim()) {
+      alert("Harap isi estimasi jam pengambilan!");
       return;
     }
 
-    // Format Pesan WhatsApp
-    let pesan = `Halo *AGITA BASO*! Saya mau pesan makanan:\n\n`;
-    pesan += `👤 *Nama:* ${namaPembeli}\n`;
-    pesan += `🍽️ *Tipe:* ${tipePesanan === 'Dine-in' ? `Makan di Tempat (Meja No. ${nomorMeja})` : 'Bungkus / Takeaway'}\n`;
+    if (tipePengiriman === 'Delivery' && !alamatDelivery.trim()) {
+      alert("Harap isi alamat pengiriman lengkap!");
+      return;
+    }
+
+    let pesan = `Halo *AGITA BASO*! Saya mau pesan [BUNGKUS]:\n\n`;
+    pesan += `👤 *Nama Pemesan:* ${namaPembeli}\n`;
+    
+    if (tipePengiriman === 'Pick-up') {
+      pesan += `🛍️ *Metode:* Pick-Up (Ambil Sendiri di Toko)\n`;
+      pesan += `⏰ *Jam Ambil:* ${jamPickup}\n`;
+    } else {
+      pesan += `🛵 *Metode:* Delivery (GoSend / GrabExpress / dkk)\n`;
+      pesan += `📍 *Alamat Kirim:* ${alamatDelivery}\n`;
+    }
+
     pesan += `-----------------------------------\n`;
     pesan += `📋 *RINCIAN PESANAN:*\n\n`;
 
@@ -96,7 +144,7 @@ export default function App() {
       pesan += `${index + 1}. *${item.nama}* x${item.qty}\n`;
       if (item.customOptions) {
         pesan += `   - Mie: ${item.customOptions.jenisMie}\n`;
-        pesan += `   - Pedas: ${item.customOptions.pedas}\n`;
+        pesan += `   - Sayur: ${item.customOptions.sayurToge}\n`;
         if (item.customOptions.catatan) {
           pesan += `   - Catatan: ${item.customOptions.catatan}\n`;
         }
@@ -105,16 +153,26 @@ export default function App() {
     });
 
     pesan += `-----------------------------------\n`;
-    pesan += `💰 *TOTAL BAYAR: Rp ${totalHarga.toLocaleString('id-ID')}*\n\n`;
-    pesan += `Mohon diproses ya, terima kasih! 🙏`;
+    pesan += `💰 *TOTAL BAKSO: Rp ${totalHarga.toLocaleString('id-ID')}*\n`;
+    if (tipePengiriman === 'Delivery') {
+      pesan += `_(Ongkir ojol akan dihitung via WhatsApp)_\n\n`;
+    } else {
+      pesan += `\n`;
+    }
+    pesan += `Mohon konfirmasi pesanan ini ya, terima kasih! 🙏`;
 
     const urlWhatsApp = `https://wa.me/${NOMOR_WA_TOKO}?text=${encodeURIComponent(pesan)}`;
     window.open(urlWhatsApp, '_blank');
+
+    setCart([]);
+    setNamaPembeli('');
+    setJamPickup('');
+    setAlamatDelivery('');
   };
 
   return (
     <div className="min-h-screen bg-amber-50 text-slate-800 pb-12">
-      {/* Header dengan Logo */}
+      {/* Header */}
       <header className="bg-red-700 text-white p-4 shadow-md sticky top-0 z-10">
         <div className="max-w-4xl mx-auto flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -124,9 +182,10 @@ export default function App() {
               className="w-10 h-10 rounded-full border-2 border-amber-300 object-cover"
               onError={(e) => { e.target.style.display = 'none'; }}
             />
-            <h1 className="text-xl font-bold">
-              AGITA BASO
-            </h1>
+            <div>
+              <h1 className="text-xl font-bold leading-none">AGITA BASO</h1>
+              <p className="text-[10px] text-amber-200 mt-0.5">Layanan Pesan Bungkus (Takeaway)</p>
+            </div>
           </div>
           <div className="bg-red-800 px-3 py-1.5 rounded-full text-sm font-semibold">
             🛒 Keranjang ({cart.reduce((a, b) => a + b.qty, 0)})
@@ -136,11 +195,7 @@ export default function App() {
 
       {/* Main Content */}
       <main className="max-w-4xl mx-auto p-4 grid grid-cols-1 md:grid-cols-3 gap-6 mt-2">
-        
-        {/* List Menu & Filter */}
         <div className="md:col-span-2 space-y-4">
-          
-          {/* Tombol Filter Kategori */}
           <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-none">
             {categories.map((cat) => (
               <button
@@ -157,7 +212,6 @@ export default function App() {
             ))}
           </div>
 
-          {/* Grid Menu Terfilter */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {filteredMenu.map((item) => (
               <div key={item.id} className="bg-white rounded-xl shadow-sm border border-amber-200 overflow-hidden flex flex-col justify-between">
@@ -195,25 +249,43 @@ export default function App() {
           ) : (
             <div className="mt-3 space-y-3">
               {cart.map((item) => (
-                <div key={item.cartItemId} className="flex justify-between items-start text-sm border-b pb-2">
-                  <div>
+                <div key={item.cartItemId} className="border-b pb-2.5 space-y-1">
+                  <div className="flex justify-between items-start text-sm">
                     <p className="font-semibold text-slate-800">{item.nama}</p>
-                    
-                    {/* Render opsi kustomisasi jika ada */}
-                    {item.customOptions && (
-                      <p className="text-[11px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 mt-0.5 inline-block">
-                        {item.customOptions.jenisMie} • {item.customOptions.pedas}
-                        {item.customOptions.catatan && ` (${item.customOptions.catatan})`}
-                      </p>
-                    )}
-
-                    <p className="text-xs text-slate-500 mt-0.5">
-                      {item.qty} x Rp {item.harga.toLocaleString('id-ID')}
-                    </p>
+                    <span className="font-bold text-slate-700 text-xs">
+                      Rp {(item.harga * item.qty).toLocaleString('id-ID')}
+                    </span>
                   </div>
-                  <span className="font-bold text-slate-700">
-                    Rp {(item.harga * item.qty).toLocaleString('id-ID')}
-                  </span>
+
+                  {item.customOptions && (
+                    <p className="text-[11px] text-amber-900 bg-amber-50 px-2 py-1 rounded border border-amber-200 block">
+                      • Mie: {item.customOptions.jenisMie}<br/>
+                      • Sayur: {item.customOptions.sayurToge}
+                      {item.customOptions.catatan && <><br/>• Catatan: {item.customOptions.catatan}</>}
+                    </p>
+                  )}
+
+                  <div className="flex justify-between items-center pt-1 text-xs text-slate-500">
+                    <span>{item.qty} x Rp {item.harga.toLocaleString('id-ID')}</span>
+                    
+                    {/* OPSI EDIT & HAPUS */}
+                    <div className="flex items-center gap-2">
+                      {item.customOptions && (
+                        <button
+                          onClick={() => handleEditCartItem(item)}
+                          className="text-amber-700 hover:text-amber-900 text-[11px] font-bold underline"
+                        >
+                          ✏️ Edit
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleRemoveFromCart(item.cartItemId)}
+                        className="text-red-600 hover:text-red-800 text-[11px] font-bold underline"
+                      >
+                        🗑️ Hapus
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ))}
               
@@ -222,24 +294,25 @@ export default function App() {
                 <span>Rp {totalHarga.toLocaleString('id-ID')}</span>
               </div>
 
-              {/* Form Data Pemesan */}
+              {/* Form Opsi Pengiriman */}
               <div className="pt-2 border-t space-y-2">
-                <div className="flex gap-2">
+                <label className="text-xs font-bold text-slate-700 block">Pilih Pengiriman:</label>
+                <div className="grid grid-cols-2 gap-2">
                   <button
-                    onClick={() => setTipePesanan('Dine-in')}
-                    className={`flex-1 py-1 text-xs font-bold rounded-lg border ${
-                      tipePesanan === 'Dine-in' ? 'bg-amber-100 border-amber-600 text-amber-900' : 'bg-slate-50 border-slate-200'
+                    onClick={() => setTipePengiriman('Pick-up')}
+                    className={`py-1.5 text-xs font-bold rounded-lg border transition ${
+                      tipePengiriman === 'Pick-up' ? 'bg-red-700 text-white border-red-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600'
                     }`}
                   >
-                    Makan di Tempat
+                    🛍️ Pick-Up (Ambil)
                   </button>
                   <button
-                    onClick={() => setTipePesanan('Takeaway')}
-                    className={`flex-1 py-1 text-xs font-bold rounded-lg border ${
-                      tipePesanan === 'Takeaway' ? 'bg-amber-100 border-amber-600 text-amber-900' : 'bg-slate-50 border-slate-200'
+                    onClick={() => setTipePengiriman('Delivery')}
+                    className={`py-1.5 text-xs font-bold rounded-lg border transition ${
+                      tipePengiriman === 'Delivery' ? 'bg-red-700 text-white border-red-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600'
                     }`}
                   >
-                    Bungkus
+                    🛵 Delivery (Ojol)
                   </button>
                 </div>
 
@@ -251,18 +324,28 @@ export default function App() {
                   className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-red-600"
                 />
 
-                {tipePesanan === 'Dine-in' && (
+                {tipePengiriman === 'Pick-up' && (
                   <input
                     type="text"
-                    placeholder="Nomor Meja (misal: 03)..."
-                    value={nomorMeja}
-                    onChange={(e) => setNomorMeja(e.target.value)}
+                    placeholder="Estimasi Jam Ambil (misal: Jam 12.30)..."
+                    value={jamPickup}
+                    onChange={(e) => setJamPickup(e.target.value)}
+                    className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-red-600"
+                  />
+                )}
+
+                {tipePengiriman === 'Delivery' && (
+                  <textarea
+                    rows="2"
+                    placeholder="Alamat Pengiriman Lengkap (untuk GoSend/GrabExpress)..."
+                    value={alamatDelivery}
+                    onChange={(e) => setAlamatDelivery(e.target.value)}
                     className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-red-600"
                   />
                 )}
               </div>
 
-              {/* Tombol Checkout WhatsApp */}
+              {/* Tombol Checkout */}
               <button
                 onClick={handleCheckoutWhatsApp}
                 className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg font-bold text-xs shadow-sm transition flex items-center justify-center gap-2 mt-2"
@@ -272,29 +355,30 @@ export default function App() {
             </div>
           )}
         </div>
-
       </main>
 
-      {/* POP-UP MODAL KUSTOMISASI */}
+      {/* POP-UP MODAL KUSTOMISASI (DIGUNAKAN UNTUK TAMBAH MAUPUN EDIT) */}
       {selectedItem && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl space-y-4">
             <div className="flex justify-between items-start border-b pb-2">
               <div>
-                <h3 className="font-bold text-lg text-slate-900">{selectedItem.nama}</h3>
+                <h3 className="font-bold text-lg text-slate-900">
+                  {editingCartItemId ? `✏️ Edit ${selectedItem.nama}` : selectedItem.nama}
+                </h3>
                 <p className="text-xs text-red-700 font-bold">
                   Rp {selectedItem.harga.toLocaleString('id-ID')}
                 </p>
               </div>
               <button 
-                onClick={() => setSelectedItem(null)}
+                onClick={() => { setSelectedItem(null); setEditingCartItemId(null); }}
                 className="text-slate-400 hover:text-slate-600 text-sm font-bold p-1"
               >
                 ✕
               </button>
             </div>
 
-            {/* Pilihan Jenis Mie */}
+            {/* OPSI 1: MIE / BIHUN */}
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1.5">Pilihan Mie / Bihun:</label>
               <div className="grid grid-cols-3 gap-2">
@@ -314,42 +398,46 @@ export default function App() {
               </div>
             </div>
 
-            {/* Pilihan Tingkat Pedas */}
+            {/* OPSI 2: SAYUR / TAUGE */}
             <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1.5">Tingkat Pedas Sambal:</label>
-              <div className="grid grid-cols-3 gap-2">
-                {['Tanpa Sambal', 'Pedas Sedang', 'Pedas Mantap 🔥'].map((level) => (
+              <label className="text-xs font-bold text-slate-700 block mb-1.5">Pilihan Sayur / Tauge:</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[
+                  'Lengkap (Sayur + Tauge)',
+                  'Sayur Saja',
+                  'Tauge Saja',
+                  'Tanpa Sayur & Tauge'
+                ].map((option) => (
                   <button
-                    key={level}
-                    onClick={() => setPedas(level)}
+                    key={option}
+                    onClick={() => setSayurToge(option)}
                     className={`py-1.5 px-2 text-xs rounded-lg border font-medium text-center transition ${
-                      pedas === level 
+                      sayurToge === option 
                         ? 'border-red-600 bg-red-50 text-red-700 font-bold' 
                         : 'border-slate-200 text-slate-600 hover:bg-slate-50'
                     }`}
                   >
-                    {level}
+                    {option}
                   </button>
                 ))}
               </div>
             </div>
 
-            {/* Catatan Khusus */}
+            {/* OPSI 3: CATATAN */}
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1">Catatan Tambahan (Opsional):</label>
               <input
                 type="text"
-                placeholder="Misal: Tanpa seledri, kuah dipisah..."
+                placeholder="Misal: Sambal dipisah, kuah dipisah..."
                 value={catatan}
                 onChange={(e) => setCatatan(e.target.value)}
                 className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-red-600"
               />
             </div>
 
-            {/* Tombol Konfirmasi */}
             <div className="pt-2 flex gap-2">
               <button
-                onClick={() => setSelectedItem(null)}
+                onClick={() => { setSelectedItem(null); setEditingCartItemId(null); }}
                 className="flex-1 py-2 text-xs font-bold text-slate-600 bg-slate-100 rounded-lg hover:bg-slate-200"
               >
                 Batal
@@ -358,14 +446,12 @@ export default function App() {
                 onClick={handleConfirmCustomization}
                 className="flex-1 py-2 text-xs font-bold text-white bg-red-600 rounded-lg hover:bg-red-700 shadow"
               >
-                Tambahkan ke Keranjang
+                {editingCartItemId ? 'Simpan Perubahan' : 'Tambahkan ke Keranjang'}
               </button>
             </div>
-
           </div>
         </div>
       )}
-
     </div>
   );
 }
