@@ -126,7 +126,7 @@ export default function App() {
       return;
     }
 
-    let pesan = `Halo *AGITA BASO*! Saya mau pesan [BUNGKUS]:\n\n`;
+    let pesan = `Halo *AGITA BASO*! Saya mau pesan:\n\n`;
     pesan += `👤 *Nama Pemesan:* ${namaPembeli}\n`;
     
     if (tipePengiriman === 'Pick-up') {
