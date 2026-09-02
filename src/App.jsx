@@ -452,13 +452,8 @@ export default function App() {
             {/* OPSI 1: MIE / BIHUN */}
             <div>
               <label className="text-xs font-bold text-slate-700 block mb-1.5">Pilihan Mie / Bihun:</label>
-              <div className="grid grid-cols-2 gap-2">
-                {[
-                  'Mie Kuning / Pipih', 
-                  'Bihun Saja', 
-                  'Mix (Mie + Bihun)',
-                  'Tanpa Mie'
-                ].map((option) => (
+              <div className="grid grid-cols-3 gap-2">
+                {['Mie Kuning / Pipih', 'Bihun Saja', 'Mix (Mie + Bihun)'].map((option) => (
                   <button
                     key={option}
                     onClick={() => setJenisMie(option)}
