@@ -1,25 +1,33 @@
 import { useState } from 'react';
 import { MENU_DATA } from './data/menu';
+import { supabase } from './supabaseClient';
+import Admin from './Admin';
 
 export default function App() {
   const [cart, setCart] = useState([]);
   const [activeCategory, setActiveCategory] = useState('Semua');
+  const [viewAdmin, setViewAdmin] = useState(false);
 
-  // Mode Opsi Pemesanan ('Pick-up' atau 'Delivery')
-  const [tipePengiriman, setTipePengiriman] = useState('Pick-up');
+  // Mode Pemesanan ('Dine-in', 'Pick-up', 'Delivery')
+  const [tipePesanan, setTipePesanan] = useState('Dine-in');
   const [namaPembeli, setNamaPembeli] = useState('');
+  const [nomorMeja, setNomorMeja] = useState('');
   const [jamPickup, setJamPickup] = useState('');
   const [alamatDelivery, setAlamatDelivery] = useState('');
 
   // State Modal Kustomisasi (Tambah & Edit)
   const [selectedItem, setSelectedItem] = useState(null);
-  const [editingCartItemId, setEditingCartItemId] = useState(null); // Menyimpan ID item yang sedang di-edit
+  const [editingCartItemId, setEditingCartItemId] = useState(null);
   const [jenisMie, setJenisMie] = useState('Mie Kuning / Pipih');
   const [sayurToge, setSayurToge] = useState('Lengkap (Sayur + Tauge)');
   const [catatan, setCatatan] = useState('');
 
-  const NOMOR_WA_TOKO = "62881023823936"; // Ganti dengan nomor WhatsApp toko kamu
+  const NOMOR_WA_TOKO = "6281234567890"; // Ganti dengan nomor WhatsApp toko kamu
   const categories = ['Semua', 'Bakso', 'Mie', 'Minuman', 'Tambahan'];
+
+  if (viewAdmin) {
+    return <Admin onBack={() => setViewAdmin(false)} />;
+  }
 
   const filteredMenu = activeCategory === 'Semua' 
     ? MENU_DATA 
@@ -31,18 +39,18 @@ export default function App() {
       addToCartDirect(item);
     } else {
       setSelectedItem(item);
-      setEditingCartItemId(null); // Mode Tambah Baru
+      setEditingCartItemId(null);
       setJenisMie('Mie Kuning / Pipih');
       setSayurToge('Lengkap (Sayur + Tauge)');
       setCatatan('');
     }
   };
 
-  // Open Modal Edit Item dari Keranjang
+  // Open Modal Edit Item
   const handleEditCartItem = (cartItem) => {
     const originalMenuItem = MENU_DATA.find((m) => m.id === cartItem.id);
     setSelectedItem(originalMenuItem || cartItem);
-    setEditingCartItemId(cartItem.cartItemId); // Mode Edit
+    setEditingCartItemId(cartItem.cartItemId);
     
     if (cartItem.customOptions) {
       setJenisMie(cartItem.customOptions.jenisMie || 'Mie Kuning / Pipih');
@@ -68,10 +76,9 @@ export default function App() {
     }
   };
 
-  // Simpan Kustomisasi (Tambah Baru vs Update Edit)
+  // Simpan Kustomisasi (Tambah vs Edit)
   const handleConfirmCustomization = () => {
     if (editingCartItemId) {
-      // 1. MODE EDIT: Perbarui item yang sudah ada di keranjang
       setCart(cart.map((item) => {
         if (item.cartItemId === editingCartItemId) {
           const newCartItemId = `${item.id}-${jenisMie}-${sayurToge}-${catatan}`;
@@ -84,7 +91,6 @@ export default function App() {
         return item;
       }));
     } else {
-      // 2. MODE TAMBAH BARU
       const cartItemId = `${selectedItem.id}-${jenisMie}-${sayurToge}-${catatan}`;
       const existing = cart.find((c) => c.cartItemId === cartItemId);
 
@@ -109,65 +115,97 @@ export default function App() {
 
   const totalHarga = cart.reduce((acc, curr) => acc + curr.harga * curr.qty, 0);
 
-  // LOGIKA CHECKOUT KE WHATSAPP TOKO
-  const handleCheckoutWhatsApp = () => {
+  // LOGIKA CHECKOUT (DINE-IN KASIR vs TAKEAWAY WA)
+  const handleCheckout = async () => {
     if (!namaPembeli.trim()) {
       alert("Harap isi nama pemesan terlebih dahulu!");
       return;
     }
 
-    if (tipePengiriman === 'Pick-up' && !jamPickup.trim()) {
-      alert("Harap isi estimasi jam pengambilan!");
-      return;
-    }
-
-    if (tipePengiriman === 'Delivery' && !alamatDelivery.trim()) {
-      alert("Harap isi alamat pengiriman lengkap!");
-      return;
-    }
-
-    let pesan = `Halo *AGITA BASO*! Saya mau pesan:\n\n`;
-    pesan += `👤 *Nama Pemesan:* ${namaPembeli}\n`;
-    
-    if (tipePengiriman === 'Pick-up') {
-      pesan += `🛍️ *Metode:* Pick-Up (Ambil Sendiri di Toko)\n`;
-      pesan += `⏰ *Jam Ambil:* ${jamPickup}\n`;
-    } else {
-      pesan += `🛵 *Metode:* Delivery (GoSend / GrabExpress / dkk)\n`;
-      pesan += `📍 *Alamat Kirim:* ${alamatDelivery}\n`;
-    }
-
-    pesan += `-----------------------------------\n`;
-    pesan += `📋 *RINCIAN PESANAN:*\n\n`;
-
-    cart.forEach((item, index) => {
-      pesan += `${index + 1}. *${item.nama}* x${item.qty}\n`;
-      if (item.customOptions) {
-        pesan += `   - Mie: ${item.customOptions.jenisMie}\n`;
-        pesan += `   - Sayur: ${item.customOptions.sayurToge}\n`;
-        if (item.customOptions.catatan) {
-          pesan += `   - Catatan: ${item.customOptions.catatan}\n`;
-        }
+    // 1. DINE-IN (MAKAN DI TEMPAT) -> Kirim ke Supabase Kasir
+    if (tipePesanan === 'Dine-in') {
+      if (!nomorMeja.trim()) {
+        alert("Harap isi nomor meja untuk pemesanan makan di tempat!");
+        return;
       }
-      pesan += `   Subtotal: Rp ${(item.harga * item.qty).toLocaleString('id-ID')}\n\n`;
-    });
 
-    pesan += `-----------------------------------\n`;
-    pesan += `💰 *TOTAL BAKSO: Rp ${totalHarga.toLocaleString('id-ID')}*\n`;
-    if (tipePengiriman === 'Delivery') {
-      pesan += `_(Ongkir ojol akan dihitung via WhatsApp)_\n\n`;
-    } else {
-      pesan += `\n`;
+      const { error } = await supabase.from('orders').insert([
+        {
+          nama_pembeli: namaPembeli,
+          tipe_pesanan: 'Dine-in',
+          nomor_meja: nomorMeja,
+          items: cart,
+          total_harga: totalHarga,
+          status: 'Masuk'
+        }
+      ]);
+
+      if (error) {
+        alert("Gagal mengirim pesanan ke kasir, silakan coba lagi.");
+        console.error(error);
+        return;
+      }
+
+      alert(`✅ Pesanan berhasil dikirim ke kasir!\n\nNama: ${namaPembeli}\nMeja: ${nomorMeja}\nMohon tunggu pesanan disajikan ya 🙏`);
+      setCart([]);
+      setNamaPembeli('');
+      setNomorMeja('');
+    } 
+    
+    // 2. TAKEAWAY (PICK-UP / DELIVERY) -> Kirim ke WhatsApp Toko
+    else {
+      if (tipePesanan === 'Pick-up' && !jamPickup.trim()) {
+        alert("Harap isi estimasi jam pengambilan!");
+        return;
+      }
+      if (tipePesanan === 'Delivery' && !alamatDelivery.trim()) {
+        alert("Harap isi alamat pengiriman lengkap!");
+        return;
+      }
+
+      let pesan = `Halo *AGITA BASO*! Saya mau pesan makanan:\n\n`;
+      pesan += `👤 *Nama Pemesan:* ${namaPembeli}\n`;
+      
+      if (tipePesanan === 'Pick-up') {
+        pesan += `🛍️ *Metode:* Pick-Up (Ambil Sendiri di Toko)\n`;
+        pesan += `⏰ *Jam Ambil:* ${jamPickup}\n`;
+      } else {
+        pesan += `🛵 *Metode:* Delivery (GoSend / GrabExpress / dkk)\n`;
+        pesan += `📍 *Alamat Kirim:* ${alamatDelivery}\n`;
+      }
+
+      pesan += `-----------------------------------\n`;
+      pesan += `📋 *RINCIAN PESANAN:*\n\n`;
+
+      cart.forEach((item, index) => {
+        pesan += `${index + 1}. *${item.nama}* x${item.qty}\n`;
+        if (item.customOptions) {
+          pesan += `   - Mie: ${item.customOptions.jenisMie}\n`;
+          pesan += `   - Sayur: ${item.customOptions.sayurToge}\n`;
+          if (item.customOptions.catatan) {
+            pesan += `   - Catatan: ${item.customOptions.catatan}\n`;
+          }
+        }
+        pesan += `   Subtotal: Rp ${(item.harga * item.qty).toLocaleString('id-ID')}\n\n`;
+      });
+
+      pesan += `-----------------------------------\n`;
+      pesan += `💰 *TOTAL BAKSO: Rp ${totalHarga.toLocaleString('id-ID')}*\n`;
+      if (tipePesanan === 'Delivery') {
+        pesan += `_(Ongkir ojol akan dihitung via WhatsApp)_\n\n`;
+      } else {
+        pesan += `\n`;
+      }
+      pesan += `Mohon konfirmasi pesanan ini ya, terima kasih! 🙏`;
+
+      const urlWhatsApp = `https://wa.me/${NOMOR_WA_TOKO}?text=${encodeURIComponent(pesan)}`;
+      window.open(urlWhatsApp, '_blank');
+
+      setCart([]);
+      setNamaPembeli('');
+      setJamPickup('');
+      setAlamatDelivery('');
     }
-    pesan += `Mohon konfirmasi pesanan ini ya, terima kasih! 🙏`;
-
-    const urlWhatsApp = `https://wa.me/${NOMOR_WA_TOKO}?text=${encodeURIComponent(pesan)}`;
-    window.open(urlWhatsApp, '_blank');
-
-    setCart([]);
-    setNamaPembeli('');
-    setJamPickup('');
-    setAlamatDelivery('');
   };
 
   return (
@@ -184,11 +222,19 @@ export default function App() {
             />
             <div>
               <h1 className="text-xl font-bold leading-none">AGITA BASO</h1>
-              <p className="text-[10px] text-amber-200 mt-0.5">Layanan Pesan Bungkus (Takeaway)</p>
+              <p className="text-[10px] text-amber-200 mt-0.5">Makan Di Tempat & Bungkus</p>
             </div>
           </div>
-          <div className="bg-red-800 px-3 py-1.5 rounded-full text-sm font-semibold">
-            🛒 Keranjang ({cart.reduce((a, b) => a + b.qty, 0)})
+          <div className="flex items-center gap-2">
+            <div className="bg-red-800 px-3 py-1.5 rounded-full text-sm font-semibold">
+              🛒 Keranjang ({cart.reduce((a, b) => a + b.qty, 0)})
+            </div>
+            <button
+              onClick={() => setViewAdmin(true)}
+              className="bg-slate-900 hover:bg-slate-950 px-3 py-1.5 rounded-full text-xs font-bold transition"
+            >
+              🔑 Kasir
+            </button>
           </div>
         </div>
       </header>
@@ -268,7 +314,6 @@ export default function App() {
                   <div className="flex justify-between items-center pt-1 text-xs text-slate-500">
                     <span>{item.qty} x Rp {item.harga.toLocaleString('id-ID')}</span>
                     
-                    {/* OPSI EDIT & HAPUS */}
                     <div className="flex items-center gap-2">
                       {item.customOptions && (
                         <button
@@ -294,25 +339,33 @@ export default function App() {
                 <span>Rp {totalHarga.toLocaleString('id-ID')}</span>
               </div>
 
-              {/* Form Opsi Pengiriman */}
+              {/* Form Opsi Pemesanan (3 Pilihan) */}
               <div className="pt-2 border-t space-y-2">
-                <label className="text-xs font-bold text-slate-700 block">Pilih Pengiriman:</label>
-                <div className="grid grid-cols-2 gap-2">
+                <label className="text-xs font-bold text-slate-700 block">Pilih Mode Pemesanan:</label>
+                <div className="grid grid-cols-3 gap-1">
                   <button
-                    onClick={() => setTipePengiriman('Pick-up')}
-                    className={`py-1.5 text-xs font-bold rounded-lg border transition ${
-                      tipePengiriman === 'Pick-up' ? 'bg-red-700 text-white border-red-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600'
+                    onClick={() => setTipePesanan('Dine-in')}
+                    className={`py-1.5 text-[11px] font-bold rounded-lg border transition ${
+                      tipePesanan === 'Dine-in' ? 'bg-red-700 text-white border-red-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600'
                     }`}
                   >
-                    🛍️ Pick-Up (Ambil)
+                    🪑 Di Tempat
                   </button>
                   <button
-                    onClick={() => setTipePengiriman('Delivery')}
-                    className={`py-1.5 text-xs font-bold rounded-lg border transition ${
-                      tipePengiriman === 'Delivery' ? 'bg-red-700 text-white border-red-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600'
+                    onClick={() => setTipePesanan('Pick-up')}
+                    className={`py-1.5 text-[11px] font-bold rounded-lg border transition ${
+                      tipePesanan === 'Pick-up' ? 'bg-red-700 text-white border-red-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600'
                     }`}
                   >
-                    🛵 Delivery (Ojol)
+                    🛍️ Pick-Up
+                  </button>
+                  <button
+                    onClick={() => setTipePesanan('Delivery')}
+                    className={`py-1.5 text-[11px] font-bold rounded-lg border transition ${
+                      tipePesanan === 'Delivery' ? 'bg-red-700 text-white border-red-700 shadow-sm' : 'bg-slate-50 border-slate-200 text-slate-600'
+                    }`}
+                  >
+                    🛵 Delivery
                   </button>
                 </div>
 
@@ -324,7 +377,17 @@ export default function App() {
                   className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-red-600"
                 />
 
-                {tipePengiriman === 'Pick-up' && (
+                {tipePesanan === 'Dine-in' && (
+                  <input
+                    type="text"
+                    placeholder="Nomor Meja (misal: Meja 03)..."
+                    value={nomorMeja}
+                    onChange={(e) => setNomorMeja(e.target.value)}
+                    className="w-full text-xs p-2 border border-slate-200 rounded-lg focus:outline-none focus:border-red-600"
+                  />
+                )}
+
+                {tipePesanan === 'Pick-up' && (
                   <input
                     type="text"
                     placeholder="Estimasi Jam Ambil (misal: Jam 12.30)..."
@@ -334,7 +397,7 @@ export default function App() {
                   />
                 )}
 
-                {tipePengiriman === 'Delivery' && (
+                {tipePesanan === 'Delivery' && (
                   <textarea
                     rows="2"
                     placeholder="Alamat Pengiriman Lengkap (untuk GoSend/GrabExpress)..."
@@ -345,19 +408,27 @@ export default function App() {
                 )}
               </div>
 
-              {/* Tombol Checkout */}
+              {/* Tombol Checkout Dinamis */}
               <button
-                onClick={handleCheckoutWhatsApp}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white py-2.5 rounded-lg font-bold text-xs shadow-sm transition flex items-center justify-center gap-2 mt-2"
+                onClick={handleCheckout}
+                className={`w-full py-2.5 rounded-lg font-bold text-xs shadow-sm transition flex items-center justify-center gap-2 mt-2 text-white ${
+                  tipePesanan === 'Dine-in' 
+                    ? 'bg-red-700 hover:bg-red-800' 
+                    : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
               >
-                <span>💬 Pesan via WhatsApp</span>
+                {tipePesanan === 'Dine-in' ? (
+                  <span>🔔 Kirim Pesanan ke Kasir</span>
+                ) : (
+                  <span>💬 Pesan via WhatsApp</span>
+                )}
               </button>
             </div>
           )}
         </div>
       </main>
 
-      {/* POP-UP MODAL KUSTOMISASI (DIGUNAKAN UNTUK TAMBAH MAUPUN EDIT) */}
+      {/* POP-UP MODAL KUSTOMISASI */}
       {selectedItem && (
         <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl space-y-4">
@@ -385,8 +456,8 @@ export default function App() {
                 {[
                   'Mie Kuning / Pipih', 
                   'Bihun Saja', 
-                  'Mix (Mie + Bihun)', 
-                  'tanpa mie'
+                  'Mix (Mie + Bihun)',
+                  'Tanpa Mie'
                 ].map((option) => (
                   <button
                     key={option}
