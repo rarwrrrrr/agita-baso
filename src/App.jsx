@@ -217,7 +217,7 @@ export default function App() {
             <img 
               src="/logo.png" 
               alt="Logo" 
-              className="w-10 h-10 rounded-full border-2 border-amber-300 object-cover"
+              className="w-10 h-10 rounded-full border-2 border-amber-300 object-cover bg-white"
               onError={(e) => { e.target.style.display = 'none'; }}
             />
             <div>
